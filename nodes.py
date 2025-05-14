@@ -19,16 +19,6 @@ try:
 except:
     pass
 
-from .pipeline.pipeline_stable_video_diffusion_controlnext import StableVideoDiffusionPipelineControlNeXt, tensor2vid
-
-from .models.controlnext_vid_svd import ControlNeXtSDVModel
-from .models.unet_spatio_temporal_condition_controlnext import UNetSpatioTemporalConditionControlNeXtModel
-from .utils.scheduling_euler_discrete_karras_fix import EulerDiscreteScheduler as EulerDiscreteSchedulerKarras
-from diffusers.schedulers import EulerDiscreteScheduler
-
-from transformers import CLIPVisionModelWithProjection, CLIPImageProcessor
-from diffusers import AutoencoderKLTemporalDecoder
-
 script_directory = os.path.dirname(os.path.abspath(__file__))
 
 
@@ -80,6 +70,13 @@ class DownloadAndLoadControlNeXt:
     CATEGORY = "ControlNeXtWrapper"
 
     def loadmodel(self, precision):
+        from .pipeline.pipeline_stable_video_diffusion_controlnext import StableVideoDiffusionPipelineControlNeXt
+        from .models.controlnext_vid_svd import ControlNeXtSDVModel
+        from .models.unet_spatio_temporal_condition_controlnext import UNetSpatioTemporalConditionControlNeXtModel
+        from diffusers.schedulers import EulerDiscreteScheduler
+        from transformers import CLIPVisionModelWithProjection, CLIPImageProcessor
+        from diffusers import AutoencoderKLTemporalDecoder
+        
         device = mm.get_torch_device()
         mm.soft_empty_cache()
         dtype = {"bf16": torch.bfloat16, "fp16": torch.float16, "fp32": torch.float32}[precision]
@@ -91,28 +88,34 @@ class DownloadAndLoadControlNeXt:
         contolnet_model_path = os.path.join(download_path, "controlnext-svd_v2-controlnet-fp16.safetensors")
         
         if not os.path.exists(unet_model_path):
-            log.info(f"Downloading model to: {unet_model_path}")
-            from huggingface_hub import snapshot_download
-            snapshot_download(repo_id="Kijai/ControlNeXt-SVD-V2-Comfy", 
-                                ignore_patterns=["*converted*"],
-                                local_dir=download_path, 
-                                local_dir_use_symlinks=False)
+            if os.path.exists("/stable-diffusion-cache/models/diffusers"):
+                download_path = "/stable-diffusion-cache/models/diffusers/controlnext"
+                unet_model_path = os.path.join(download_path, "controlnext-svd_v2-unet-fp16.safetensors")
+                contolnet_model_path = os.path.join(download_path, "controlnext-svd_v2-controlnet-fp16.safetensors")
+            else:
+                log.info(f"Downloading model to: {unet_model_path}")
+                from huggingface_hub import snapshot_download
+                snapshot_download(repo_id="Kijai/ControlNeXt-SVD-V2-Comfy", 
+                                    ignore_patterns=["*converted*"],
+                                    local_dir=download_path, 
+                                    local_dir_use_symlinks=False)
 
         log.info(f"Loading model from: {unet_model_path}")
         pbar.update(1)
 
         svd_path = os.path.join(folder_paths.models_dir, "diffusers", "stable-video-diffusion-img2vid-xt-1-1")
         if not os.path.exists(svd_path):
-            log.info(f"Downloading SVD model to: {svd_path}")
-            from huggingface_hub import snapshot_download
-            snapshot_download(repo_id="vdo/stable-video-diffusion-img2vid-xt-1-1", 
-                                allow_patterns=[f"*.json", "*fp16*"],
-                                ignore_patterns=["*unet*"],
-                                local_dir=svd_path, 
-                                local_dir_use_symlinks=False)
+            if os.path.exists("/stable-diffusion-cache/models/diffusers"):
+                svd_path = "/stable-diffusion-cache/models/diffusers/stable-video-diffusion-img2vid-xt-1-1"
+            else:
+                log.info(f"Downloading SVD model to: {svd_path}")
+                from huggingface_hub import snapshot_download
+                snapshot_download(repo_id="vdo/stable-video-diffusion-img2vid-xt-1-1", 
+                                    allow_patterns=[f"*.json", "*fp16*"],
+                                    ignore_patterns=["*unet*"],
+                                    local_dir=svd_path, 
+                                    local_dir_use_symlinks=False)
         pbar.update(1)
-
-        svd_path = os.path.join(folder_paths.models_dir, "diffusers", "stable-video-diffusion-img2vid-xt-1-1")
 
         unet_config = UNetSpatioTemporalConditionControlNeXtModel.load_config(os.path.join(script_directory, "configs", "unet_config.json"))
         log.info("Loading UNET")
@@ -181,6 +184,8 @@ class ControlNextDiffusersScheduler:
     CATEGORY = "ControlNeXtSVD"
 
     def loadmodel(self, scheduler, sigma_min, sigma_max):
+        from .utils.scheduling_euler_discrete_karras_fix import EulerDiscreteScheduler as EulerDiscreteSchedulerKarras
+        from diffusers.schedulers import EulerDiscreteScheduler
 
         scheduler_config = {
             "beta_end": 0.012,
@@ -333,6 +338,7 @@ class ControlNextDecode:
     CATEGORY = "ControlNeXtSVD"
 
     def process(self, controlnext_pipeline, samples, decode_chunk_size):
+        from .pipeline.pipeline_stable_video_diffusion_controlnext import tensor2vid
         mm.soft_empty_cache()
     
         pipeline = controlnext_pipeline['pipeline']
@@ -487,6 +493,7 @@ class ControlNextSVDApply:
     CATEGORY = "ControlNeXtSVD"
 
     def patch(self, model, pose_images, strength, blocks, input_block_patch_after_skip):
+        from .models.controlnext_vid_svd import ControlNeXtSDVModel
 
         device = mm.get_torch_device()
         dtype = mm.unet_dtype()

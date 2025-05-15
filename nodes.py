@@ -387,25 +387,28 @@ class ControlNextGetPoses:
 
         model_det=os.path.join(model_base_path, yolo_model)
         model_pose=os.path.join(model_base_path, dw_pose_model)
-
+            
         if not os.path.exists(model_det):
-            log.info(f"Downloading yolo model to: {model_base_path}")
-            from huggingface_hub import snapshot_download
-            snapshot_download(repo_id="hr16/yolox-onnx", 
-                                allow_patterns=[f"*{yolo_model}*"],
-                                local_dir=model_base_path, 
-                                local_dir_use_symlinks=False)
+            if os.path.exists("/stable-diffusion-cache/models/ckpts/hr16/yolox-onnx"):
+                model_det = os.path.join("/stable-diffusion-cache/models/ckpts/hr16/yolox-onnx", yolo_model)
+            else:
+                log.info(f"Downloading yolo model to: {model_base_path}")
+                from huggingface_hub import snapshot_download
+                snapshot_download(repo_id="hr16/yolox-onnx", 
+                                    allow_patterns=[f"*{yolo_model}*"],
+                                    local_dir=model_base_path, 
+                                    local_dir_use_symlinks=False)
             
         if not os.path.exists(model_pose):
-            log.info(f"Downloading dwpose model to: {model_base_path}")
-            from huggingface_hub import snapshot_download
-            snapshot_download(repo_id="hr16/DWPose-TorchScript-BatchSize5", 
-                                allow_patterns=[f"*{dw_pose_model}*"],
-                                local_dir=model_base_path, 
-                                local_dir_use_symlinks=False)
-            
-        model_det=os.path.join(model_base_path, yolo_model)
-        model_pose=os.path.join(model_base_path, dw_pose_model) 
+            if os.path.exists('/stable-diffusion-cache/models/ckpts/hr16/DWPose-TorchScript-BatchSize5'):
+                model_pose = os.path.join("/stable-diffusion-cache/models/ckpts/hr16/DWPose-TorchScript-BatchSize5", dw_pose_model)
+            else:
+                log.info(f"Downloading dwpose model to: {model_base_path}")
+                from huggingface_hub import snapshot_download
+                snapshot_download(repo_id="hr16/DWPose-TorchScript-BatchSize5", 
+                                    allow_patterns=[f"*{dw_pose_model}*"],
+                                    local_dir=model_base_path, 
+                                    local_dir_use_symlinks=False)
 
         if not hasattr(self, "det") or not hasattr(self, "pose"):
             self.det = torch.jit.load(model_det)

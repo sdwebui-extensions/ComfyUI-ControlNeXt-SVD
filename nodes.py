@@ -88,10 +88,13 @@ class DownloadAndLoadControlNeXt:
         contolnet_model_path = os.path.join(download_path, "controlnext-svd_v2-controlnet-fp16.safetensors")
         
         if not os.path.exists(unet_model_path):
-            if os.path.exists("/stable-diffusion-cache/models/diffusers"):
-                download_path = "/stable-diffusion-cache/models/diffusers/controlnext"
-                unet_model_path = os.path.join(download_path, "controlnext-svd_v2-unet-fp16.safetensors")
-                contolnet_model_path = os.path.join(download_path, "controlnext-svd_v2-controlnet-fp16.safetensors")
+            cache_download_path = os.path.join(folder_paths.cache_dir, "models/diffusers/controlnext")
+            cache_unet_model_path = os.path.join(cache_download_path, "controlnext-svd_v2-unet-fp16.safetensors")
+            cache_contolnet_model_path = os.path.join(cache_download_path, "controlnext-svd_v2-controlnet-fp16.safetensors")
+            if os.path.exists(cache_download_path):
+                download_path = cache_download_path
+                unet_model_path = cache_unet_model_path
+                contolnet_model_path = cache_contolnet_model_path
             else:
                 log.info(f"Downloading model to: {unet_model_path}")
                 from huggingface_hub import snapshot_download
@@ -105,8 +108,9 @@ class DownloadAndLoadControlNeXt:
 
         svd_path = os.path.join(folder_paths.models_dir, "diffusers", "stable-video-diffusion-img2vid-xt-1-1")
         if not os.path.exists(svd_path):
-            if os.path.exists("/stable-diffusion-cache/models/diffusers"):
-                svd_path = "/stable-diffusion-cache/models/diffusers/stable-video-diffusion-img2vid-xt-1-1"
+            cache_svd_path = os.path.join(folder_paths.cache_dir, "models/diffusers/stable-video-diffusion-img2vid-xt-1-1")
+            if os.path.exists(cache_svd_path):
+                svd_path = cache_svd_path
             else:
                 log.info(f"Downloading SVD model to: {svd_path}")
                 from huggingface_hub import snapshot_download
@@ -389,8 +393,9 @@ class ControlNextGetPoses:
         model_pose=os.path.join(model_base_path, dw_pose_model)
             
         if not os.path.exists(model_det):
-            if os.path.exists("/stable-diffusion-cache/models/ckpts/hr16/yolox-onnx"):
-                model_det = os.path.join("/stable-diffusion-cache/models/ckpts/hr16/yolox-onnx", yolo_model)
+            cache_model_det = os.path.join(folder_paths.cache_dir, "models/ckpts/hr16/yolox-onnx", yolo_model)
+            if os.path.exists(cache_model_det):
+                model_det = cache_model_det
             else:
                 log.info(f"Downloading yolo model to: {model_base_path}")
                 from huggingface_hub import snapshot_download
@@ -400,8 +405,9 @@ class ControlNextGetPoses:
                                     local_dir_use_symlinks=False)
             
         if not os.path.exists(model_pose):
-            if os.path.exists('/stable-diffusion-cache/models/ckpts/hr16/DWPose-TorchScript-BatchSize5'):
-                model_pose = os.path.join("/stable-diffusion-cache/models/ckpts/hr16/DWPose-TorchScript-BatchSize5", dw_pose_model)
+            cache_model_pose = os.path.join(folder_paths.cache_dir, "models/ckpts/hr16/DWPose-TorchScript-BatchSize5", dw_pose_model)
+            if os.path.exists(cache_model_pose):
+                model_pose = cache_model_pose
             else:
                 log.info(f"Downloading dwpose model to: {model_base_path}")
                 from huggingface_hub import snapshot_download

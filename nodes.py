@@ -7,6 +7,9 @@ import gc
 import folder_paths
 import comfy.model_management as mm
 import comfy.utils
+from threading import Thread
+import queue
+import time
 
 try:
     import diffusers.models.activations
@@ -375,6 +378,7 @@ class ControlNextGetPoses:
     CATEGORY = "ControlNextWrapper"
 
     def process(self, ref_image, pose_images, include_body, include_hand, include_face):
+        tic = time.time()
         device = mm.get_torch_device()
         offload_device = mm.unet_offload_device()
         from .dwpose.util import draw_pose
@@ -428,6 +432,7 @@ class ControlNextGetPoses:
 
         self.det = self.det.to(device)
         self.pose = self.pose.to(device)
+        toc_prepare = time.time() - tic
 
         # select ref-keypoint from reference pose for pose rescale
         ref_pose = self.dwprocessor(ref_image)
@@ -447,6 +452,7 @@ class ControlNextGetPoses:
         for img_np in pose_images_np:
             detected_poses_np_list.append(self.dwprocessor(img_np))
             pbar.update(1)
+        toc_getpose = time.time() - tic
 
         self.det = self.det.to(offload_device)
         self.pose = self.pose.to(offload_device)
@@ -462,24 +468,46 @@ class ControlNextGetPoses:
         a = np.array([ax, ay])
         b = np.array([bx, by])
         output_pose = []
+        qout = {}
+
+        def _draw_pose(qin, ):
+            while True:
+                index, detected_pose, height, width, include_body, include_hand, include_face = qin.get()
+                if index is None:
+                    return
+                im = draw_pose(detected_pose, height, width, include_body=include_body, include_hand=include_hand, include_face=include_face)
+                qout[index] = torch.from_numpy(np.array(im))
+
+        qin = queue.Queue()
+        num_threads = 16
+        threads = [Thread(target=_draw_pose, args=(qin, )) for _ in range(num_threads)]
+        [_.start() for _ in threads]
+        
         # pose rescale 
-        for detected_pose in detected_poses_np_list:
+        for index, detected_pose in enumerate(detected_poses_np_list):
             if include_body:
                 detected_pose['bodies']['candidate'] = detected_pose['bodies']['candidate'] * a + b
             if include_hand:
                 detected_pose['hands'] = detected_pose['hands'] * a + b
             if include_face:
                 detected_pose['faces'] = detected_pose['faces'] * a + b
-            im = draw_pose(detected_pose, height, width, include_body=include_body, include_hand=include_hand, include_face=include_face)
-            output_pose.append(np.array(im))
+            qin.put([index, detected_pose, height, width, include_body, include_hand, include_face])
+        for _ in range(num_threads):
+            qin.put([None, None, None, None, None, None, None])
+        [_.join() for _ in threads]
+        for index in range(len(detected_poses_np_list)):
+            output_pose.append(qout[index])
+            # im = draw_pose(detected_pose, height, width, include_body=include_body, include_hand=include_hand, include_face=include_face)
+            # output_pose.append(np.array(im))
 
-        output_pose_tensors = [torch.tensor(np.array(im)) for im in output_pose]
-        output_tensor = torch.stack(output_pose_tensors) / 255
+        # output_pose_tensors = [torch.from_numpy(np.array(im)) for im in output_pose]
+        output_tensor = torch.stack(output_pose) / 255
 
         ref_pose_img = draw_pose(ref_pose, height, width, include_body=include_body, include_hand=include_hand, include_face=include_face)
-        ref_pose_tensor = torch.tensor(np.array(ref_pose_img)) / 255
+        ref_pose_tensor = torch.from_numpy(np.array(ref_pose_img)) / 255
         output_tensor = torch.cat((ref_pose_tensor.unsqueeze(0), output_tensor))
         output_tensor = output_tensor.permute(0, 2, 3, 1).cpu().float()
+        print(f'all time:{time.time() - tic}, toc_getpose:{toc_getpose}, toc_prepare:{toc_prepare}')
         
         return output_tensor, output_tensor[1:]
 
